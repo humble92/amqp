@@ -1,27 +1,49 @@
 package amqp
 
-type Publisher interface {
-	Publish(exchange, key string, message []byte) error
-}
+import (
+	"encoding/json"
+	"github.com/streadway/amqp"
+)
 
-type stateLessPublisher struct {
+type Publisher interface {
+	PublishJson(exchange, key string, message interface{}) error
 }
 
 type stateFullPublisher struct {
-}
-
-func NewStateLessPublisher(uri string) (Publisher, error) {
-	return nil, nil
+	connection *amqp.Connection
+	channel    *amqp.Channel
 }
 
 func NewStateFullPublisher(uri string) (Publisher, error) {
-	return nil, nil
+	connection, err := amqp.Dial(uri)
+	if err != nil {
+		return nil, err
+	}
+	channel, err := connection.Channel()
+	if err != nil {
+		return nil, err
+	}
+
+	return &stateFullPublisher{
+		connection: connection,
+		channel:    channel,
+	}, nil
 }
 
-func (slp *stateLessPublisher) Publish(exchange, key string, message []byte) error {
-	return nil
-}
+func (sfp *stateFullPublisher) PublishJson(exchange, key string, message interface{}) error {
+	// serialize interface into json
+	bytes, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
 
-func (sfp *stateFullPublisher) Publish(exchange, key string, message []byte) error {
-	return nil
+	// publish the message
+	return sfp.channel.Publish(exchange, key, false, false, amqp.Publishing{
+		Headers:         amqp.Table{},
+		ContentType:     "application/json",
+		ContentEncoding: "",
+		Body:            bytes,
+		DeliveryMode:    amqp.Persistent,
+		Priority:        0,
+	})
 }
